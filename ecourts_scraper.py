@@ -58,11 +58,16 @@ def sync_case():
         soup = BeautifulSoup(resp.text, 'html.parser')
         
         # Attempt to find the next hearing date table cell
-        date_element = soup.find(string=re.compile('Next Hearing Date', re.I))
+        date_text = soup.find(string=re.compile('Next Hearing Date', re.I))
         
-        if date_element:
-            # If the firewall let us through, extract the live date
-            next_date = date_element.find_next('td').text.strip()
+        if date_text:
+            try:
+                # If the firewall let us through, extract the live date
+                parent_tag = date_text.parent
+                next_td = parent_tag.find_next('td')
+                next_date = next_td.text.strip() if next_td else "ERROR: Parsing Failed"
+            except Exception:
+                next_date = "ERROR: Firewall/CAPTCHA Blocked"
         else:
             # If Render's IP is blocked or the OCR fails, we gracefully fallback
             # We use an obvious error date so you know it failed
@@ -76,7 +81,14 @@ def sync_case():
         })
         
     except Exception as e:
-        return jsonify({"error": "Failed to scrape data", "details": str(e)}), 500
+        # If anything crashes, return a 200 with the error string so it updates the row 
+        # instead of throwing a 500 internal server error
+        return jsonify({
+            "cnr_number": cnr_number,
+            "next_hearing_date": "ERROR: Python Crash - " + str(e),
+            "status": "Active",
+            "message": "Script crashed"
+        }), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
